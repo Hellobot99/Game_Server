@@ -4,8 +4,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <vector>
+#include <termios.h>
 
 #define BUFFER_SIZE 1024
+
+typedef struct{
+    char user_name[100];
+    char buffer[1024];    
+} Packet;
 
 int main(int argc, char *argv[]) {
 
@@ -15,11 +21,11 @@ int main(int argc, char *argv[]) {
     }
 
     int port = std::stoi(argv[1]);
-
     int server_fd;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
     char buffer[BUFFER_SIZE] = {0};
+    Packet packet;
     fd_set read_fds;
     FD_ZERO(&read_fds);
 
@@ -46,6 +52,10 @@ int main(int argc, char *argv[]) {
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
+
+    int option=1;
+    int optlen=sizeof(option);    
+    setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&option,optlen);
 
     std::cout << "Server listening on port " << port << "..." << std::endl;
 
@@ -87,13 +97,14 @@ int main(int argc, char *argv[]) {
         // 기존 클라이언트들 데이터 읽기 및 에코 처리
         for (auto it = client_fds.begin(); it != client_fds.end(); ) {
             if (FD_ISSET(*it, &temp_fds)) {
-                int n = read(*it, buffer, sizeof(buffer));
+                int n = read(*it, &packet, sizeof(packet));
                 if (n <= 0) {
                     close(*it);
                     it = client_fds.erase(it);
                     std::cout << "Client left, "<< client_fds.size() << " Client left" << std::endl;
                 } else {
-                    send(*it, buffer, n, 0);
+                    for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++) 
+                        if(*it != *iter) write(*iter, &packet, sizeof(packet));
                     ++it;
                 }
             } else {
