@@ -7,11 +7,16 @@
 
 #define BUFFER_SIZE 1024
 
+#define JOIN 1
+#define MESSAGE 2
+#define EXIT 3
+
 typedef struct{
+    int cmd;
     char user_name[100];
-    char buffer[1024];
-    
+    char buffer[1024];    
 } Packet;
+
 
 int main(int argc , char *argv[]) {
 
@@ -49,6 +54,15 @@ int main(int argc , char *argv[]) {
 
     std::cout << "Enter your name: ";
     std::getline(std::cin, name);
+    strncpy(packet.user_name, name.c_str(), sizeof(packet.user_name) - 1);
+    packet.user_name[sizeof(packet.user_name) - 1] = '\0';
+
+    std::cout << "들어갈 방의 이름을 입력하세요: ";
+    std::cin >> packet.buffer;
+    std::cin.ignore();
+    packet.cmd = JOIN;
+    write(sock, &packet, sizeof(packet));
+    std::cout << packet.buffer << " 방에 들어갔습니다." << std::endl;
 
     // 5. 메시지 보내고 받기
     while (1) {
@@ -66,7 +80,7 @@ int main(int argc , char *argv[]) {
         if(FD_ISSET(STDIN_FILENO, &read_fds)){   
             
             std::cout << "[보내기] ";
-
+            
             std::getline(std::cin, input);
             if (input == "exit") break;
             
@@ -76,6 +90,7 @@ int main(int argc , char *argv[]) {
             strncpy(packet.buffer, input.c_str(), sizeof(packet.buffer) - 1);
             packet.buffer[sizeof(packet.buffer) - 1] = '\0';
 
+            packet.cmd = MESSAGE;
             write(sock, &packet, sizeof(packet));
             std::cout << input << std::endl;
         }

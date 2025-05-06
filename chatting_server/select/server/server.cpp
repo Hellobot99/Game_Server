@@ -5,13 +5,27 @@
 #include <netinet/in.h>
 #include <vector>
 #include <termios.h>
+#include <unordered_map>
+#include <algorithm>
+#include <string>
+#include <unordered_set>
 
 #define BUFFER_SIZE 1024
 
+#define JOIN 1
+#define MESSAGE 2
+#define EXIT 3
+
 typedef struct{
+    int cmd;
     char user_name[100];
     char buffer[1024];    
 } Packet;
+
+typedef struct{
+    std::string name;
+    std::unordered_set<int> clients;
+} chatRoom;
 
 int main(int argc, char *argv[]) {
 
@@ -28,6 +42,9 @@ int main(int argc, char *argv[]) {
     Packet packet;
     fd_set read_fds;
     FD_ZERO(&read_fds);
+
+    std::unordered_map <std::string, chatRoom> chatRooms;
+    std::unordered_map <std::string, std::string> userNames;
 
     // 1. 서버 소켓 생성
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -99,13 +116,44 @@ int main(int argc, char *argv[]) {
             if (FD_ISSET(*it, &temp_fds)) {
                 int n = read(*it, &packet, sizeof(packet));
                 if (n <= 0) {
-                    close(*it);
+                    int client_fd = *it;
                     it = client_fds.erase(it);
-                    std::cout << "Client left, "<< client_fds.size() << " Client left" << std::endl;
+                    std::string username(packet.user_name);
+                    std::string roomname = userNames[username];
+                    chatRooms[roomname].clients.erase(client_fd);
+                    userNames.erase(username);
+                    close(client_fd);
+
                 } else {
-                    for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++) 
-                        if(*it != *iter) write(*iter, &packet, sizeof(packet));
-                    ++it;
+                    if(packet.cmd == JOIN){
+                        std::string roomname(packet.buffer);
+                        std::string username(packet.user_name);
+                    
+                        userNames[username] = roomname;
+                    
+                        if(auto room = chatRooms.find(roomname); room != chatRooms.end()){
+                            room->second.clients.insert(*it);
+                        } else {
+                            chatRoom newRoom;
+                            newRoom.name = roomname;
+                            newRoom.clients.insert(*it);
+                            chatRooms[roomname] = newRoom;
+                        }
+                    
+                        ++it;
+                    }
+                    
+                    else if(packet.cmd == MESSAGE){
+                        std::string username(packet.user_name);
+                        std::string roomname = userNames[username];
+                        std::unordered_set<int> client_fds = chatRooms[roomname].clients;
+                        for (int client_fd : client_fds) {
+                            if (client_fd != *it) {
+                                write(client_fd, &packet, sizeof(packet));
+                            }
+                        }
+                        ++it;
+                    }
                 }
             } else {
                 ++it;
