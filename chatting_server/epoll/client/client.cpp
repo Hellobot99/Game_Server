@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <termios.h>
 #include <poll.h>
+#include <sys/epoll.h>
 
 #define BUFFER_SIZE 1024
 
@@ -15,9 +16,8 @@
 typedef struct{
     int cmd;
     char user_name[100];
-    char buffer[1024];    
+    char buffer[BUFFER_SIZE];    
 } Packet;
-
 
 int main(int argc , char *argv[]) {
 
@@ -45,12 +45,6 @@ int main(int argc , char *argv[]) {
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
 
-    struct pollfd fds[2];
-    fds[0].fd = sock;
-    fds[0].events = POLLIN;
-    fds[1].fd = STDIN_FILENO;
-    fds[1].events = POLLIN;
-
     // 4. 서버에 연결
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cout << "\nConnection Failed \n";
@@ -58,6 +52,16 @@ int main(int argc , char *argv[]) {
     }
 
     std::cout << "Connected to server!" << std::endl;
+
+    struct epoll_event ev, events[2];
+    int epfd = epoll_create(1), nfds;
+
+    ev.events = EPOLLIN;
+    ev.data.fd = sock;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &ev); 
+    ev.events = EPOLLIN;
+    ev.data.fd = STDIN_FILENO;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev); 
 
     std::cout << "Enter your name: ";
     std::getline(std::cin, name);
@@ -73,42 +77,38 @@ int main(int argc , char *argv[]) {
 
     // 5. 메시지 보내고 받기
     while (1) {
+        nfds = epoll_wait(epfd,events,2,-1);
         
-        int activity = poll(fds, 2, -1);
-        if (activity < 0) {
-            perror("poll error");
-            exit(EXIT_FAILURE);
-        }
+        for(int i=0;i<nfds;i++){
+            if(events[i].data.fd == sock){
+                int valread = read(sock, &packet, sizeof(packet));
 
-        // 새로운 클라이언트 접속 확인
-        if (fds[0].revents & POLLIN) {
-            int valread = read(sock, &packet, sizeof(packet));
-
-            if(packet.cmd == JOIN){
-                std::cout<<packet.user_name<<" 가 " <<packet.buffer<< " 방에 참여했습니다."<<std::endl;
+                if(packet.cmd == JOIN){
+                    std::cout<<packet.user_name<<" 가 " <<packet.buffer<< " 방에 참여했습니다."<<std::endl;
+                }
+                else if (packet.cmd == MESSAGE){
+                    std::cout << "[받기] " << packet.user_name << " : " << packet.buffer << std::endl;
+                }       
+                else if(packet.cmd == EXIT){
+                    std::cout << packet.user_name<<" 가 "<<packet.buffer<<" 방을 나갔습니다."<<std::endl;
+                } 
             }
-            else if (packet.cmd == MESSAGE){
-                std::cout << "[받기] " << packet.user_name << " : " << packet.buffer << std::endl;
-            }       
-            else if(packet.cmd == EXIT){
-                std::cout << packet.user_name<<" 가 "<<packet.buffer<<" 방을 나갔습니다."<<std::endl;
-            } 
-        }
-        else if(fds[1].revents & POLLIN){
-            std::cout << "[보내기] ";
-            std::cout.flush();
-            std::getline(std::cin, input);
-            if (input == "exit") break;
+            else if(events[i].data.fd == STDIN_FILENO){
+                std::cout << "[보내기] ";
+                std::cout.flush();
+                std::getline(std::cin, input);
+                if (input == "exit") break;
             
-            strncpy(packet.user_name, name.c_str(), sizeof(packet.user_name) - 1);
-            packet.user_name[sizeof(packet.user_name) - 1] = '\0';
+                strncpy(packet.user_name, name.c_str(), sizeof(packet.user_name) - 1);
+                packet.user_name[sizeof(packet.user_name) - 1] = '\0';
 
-            strncpy(packet.buffer, input.c_str(), sizeof(packet.buffer) - 1);
-            packet.buffer[sizeof(packet.buffer) - 1] = '\0';
+                strncpy(packet.buffer, input.c_str(), sizeof(packet.buffer) - 1);
+                packet.buffer[sizeof(packet.buffer) - 1] = '\0';
 
-            packet.cmd = MESSAGE;
-            write(sock, &packet, sizeof(packet));
-            std::cout << input << std::endl;
+                packet.cmd = MESSAGE;
+                write(sock, &packet, sizeof(packet));
+                std::cout << input << std::endl;
+            }
         }
     }
 

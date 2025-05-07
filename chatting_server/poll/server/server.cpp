@@ -118,6 +118,7 @@ int main(int argc, char *argv[]) {
                     userNames.erase(username);
 
                     packet.cmd = EXIT;
+                    strncpy(packet.buffer, roomname.c_str(), sizeof(packet.buffer) - 1);
 
                     for (int temp_fd : chatRooms[roomname].clients) {
                         if (temp_fd != fds[i].fd) {

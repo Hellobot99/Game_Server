@@ -8,8 +8,10 @@
 #include <poll.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <sys/epoll.h>
 
 #define BUFFER_SIZE 1024
+#define MAX_EVENTS 100
 
 #define JOIN 1
 #define MESSAGE 2
@@ -75,58 +77,52 @@ int main(int argc, char *argv[]) {
 
     std::vector<int> client_fds;
     
-    struct pollfd fds[1024];
-    fds[0].fd = server_fd;
-    fds[0].events = POLLIN;
-    for(int i = 1; i < 1024; i++) {
-        fds[i].fd = -1; // 초기화
-    }
+    struct epoll_event ev, events[MAX_EVENTS];
+    int epfd = epoll_create(1), nfds;
+    ev.events = EPOLLIN;
+    ev.data.fd = server_fd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, server_fd, &ev); 
 
     while(1) {
 
-        int activity = poll(fds, client_fds.size() + 1, -1);
-        if (activity < 0) {
-            perror("poll error");
-            exit(EXIT_FAILURE);
-        }
+        nfds = epoll_wait(epfd,events,MAX_EVENTS,-1);
+        for(int i=0;i<nfds;i++){
+            // 새로운 클라이언트 접속 확인
+            if(events[i].data.fd == server_fd){
+                int temp_client = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+                if (temp_client < 0) {
+                    perror("accept failed");
+                    exit(EXIT_FAILURE);
+                }
 
-        // 새로운 클라이언트 접속 확인
-        if (fds[0].revents & POLLIN) {
-            int temp_client = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-            if (temp_client < 0) {
-                perror("accept failed");
-                exit(EXIT_FAILURE);
+                client_fds.push_back(temp_client);
+
+                ev.events = EPOLLIN;
+                ev.data.fd = temp_client;
+                epoll_ctl(epfd,EPOLL_CTL_ADD,temp_client,&ev);
+
+                std::cout << client_fds.size() << " Client connected!" << std::endl;
             }
-
-            client_fds.push_back(temp_client);
-
-            fds[client_fds.size()].fd = temp_client;
-            fds[client_fds.size()].events = POLLIN;
-
-            std::cout << client_fds.size() << " Client connected!" << std::endl;
-        }
-
-        // 기존 클라이언트들 데이터 읽기 및 에코 처리
-        for(int i = 1; i < client_fds.size() + 1; i++) {
-            if (fds[i].revents & POLLIN) {
-                int n = read(fds[i].fd, &packet, sizeof(packet));
+            else{
+                // 기존 클라이언트들 데이터 읽기 및 에코 처리
+                int n = read(events[i].data.fd, &packet, sizeof(packet));
                 if (n <= 0) {
-                    int client_fd = fds[i].fd;
+                    int client_fd = events[i].data.fd;
                     std::string username(packet.user_name);
                     std::string roomname = userNames[username];
                     chatRooms[roomname].clients.erase(client_fd);
                     userNames.erase(username);
 
                     packet.cmd = EXIT;
+                    strncpy(packet.buffer, roomname.c_str(), sizeof(packet.buffer) - 1);
 
                     for (int temp_fd : chatRooms[roomname].clients) {
-                        if (temp_fd != fds[i].fd) {
+                        if (temp_fd != events[i].data.fd) {
                             write(temp_fd, &packet, sizeof(packet));
                         }
                     }
 
-                    close(fds[i].fd);
-                    fds[i].fd = -1;
+                    close(events[i].data.fd);
                     client_fds.erase(client_fds.begin() + (i - 1));
                     std::cout << "Client left, "<< client_fds.size() << " Client left" << std::endl;
                 } else {
@@ -137,16 +133,16 @@ int main(int argc, char *argv[]) {
                         userNames[username] = roomname;
                     
                         if(auto room = chatRooms.find(roomname); room != chatRooms.end()){
-                            room->second.clients.insert(fds[i].fd);
+                            room->second.clients.insert(events[i].data.fd);
                         } else {
                             chatRoom newRoom;
                             newRoom.name = roomname;
-                            newRoom.clients.insert(fds[i].fd);
+                            newRoom.clients.insert(events[i].data.fd);
                             chatRooms[roomname] = newRoom;
                         }
 
                         for (int client_fd : chatRooms[roomname].clients) {
-                            if (client_fd != fds[i].fd) {
+                            if (client_fd != events[i].data.fd) {
                                 write(client_fd, &packet, sizeof(packet));
                             }
                         }
@@ -155,13 +151,13 @@ int main(int argc, char *argv[]) {
                         std::string username(packet.user_name);
                         std::string roomname = userNames[username];
                         for (int client_fd : chatRooms[roomname].clients) {
-                            if (client_fd != fds[i].fd) {
+                            if (client_fd != events[i].data.fd) {
                                 write(client_fd, &packet, sizeof(packet));
                             }
                         }
                     }
                 }
-            } 
+            }
         }
     }    
 
