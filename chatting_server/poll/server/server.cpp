@@ -6,13 +6,28 @@
 #include <vector>
 #include <termios.h>
 #include <poll.h>
+#include <unordered_map>
+#include <unordered_set>
 
 #define BUFFER_SIZE 1024
 
+#define JOIN 1
+#define MESSAGE 2
+#define EXIT 3
+
 typedef struct{
+    int cmd;
     char user_name[100];
     char buffer[1024];    
 } Packet;
+
+typedef struct{
+    std::string name;
+    std::unordered_set<int> clients;
+} chatRoom;
+
+std::unordered_map <std::string, chatRoom> chatRooms;
+std::unordered_map <std::string, std::string> userNames;
 
 int main(int argc, char *argv[]) {
 
@@ -35,6 +50,10 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    int option=1;
+    int optlen=sizeof(option);    
+    setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&option,optlen);
+
     // 2. 주소 설정
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -51,10 +70,6 @@ int main(int argc, char *argv[]) {
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
-
-    int option=1;
-    int optlen=sizeof(option);    
-    setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&option,optlen);
 
     std::cout << "Server listening on port " << port << "..." << std::endl;
 
@@ -96,17 +111,59 @@ int main(int argc, char *argv[]) {
             if (fds[i].revents & POLLIN) {
                 int n = read(fds[i].fd, &packet, sizeof(packet));
                 if (n <= 0) {
+                    int client_fd = fds[i].fd;
+                    std::string username(packet.user_name);
+                    std::string roomname = userNames[username];
+                    chatRooms[roomname].clients.erase(client_fd);
+                    userNames.erase(username);
+
+                    packet.cmd = EXIT;
+
+                    for (int temp_fd : chatRooms[roomname].clients) {
+                        if (temp_fd != fds[i].fd) {
+                            write(temp_fd, &packet, sizeof(packet));
+                        }
+                    }
+
                     close(fds[i].fd);
                     fds[i].fd = -1;
                     client_fds.erase(client_fds.begin() + (i - 1));
                     std::cout << "Client left, "<< client_fds.size() << " Client left" << std::endl;
                 } else {
-                    for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++) 
-                        if(*iter != fds[i].fd) write(*iter, &packet, sizeof(packet));
+                    if(packet.cmd == JOIN){
+                        std::string roomname(packet.buffer);
+                        std::string username(packet.user_name);
+                    
+                        userNames[username] = roomname;
+                    
+                        if(auto room = chatRooms.find(roomname); room != chatRooms.end()){
+                            room->second.clients.insert(fds[i].fd);
+                        } else {
+                            chatRoom newRoom;
+                            newRoom.name = roomname;
+                            newRoom.clients.insert(fds[i].fd);
+                            chatRooms[roomname] = newRoom;
+                        }
+
+                        for (int client_fd : chatRooms[roomname].clients) {
+                            if (client_fd != fds[i].fd) {
+                                write(client_fd, &packet, sizeof(packet));
+                            }
+                        }
+                    }
+                    else if(packet.cmd == MESSAGE){
+                        std::string username(packet.user_name);
+                        std::string roomname = userNames[username];
+                        for (int client_fd : chatRooms[roomname].clients) {
+                            if (client_fd != fds[i].fd) {
+                                write(client_fd, &packet, sizeof(packet));
+                            }
+                        }
+                    }
                 }
             } 
         }
-    }
+    }    
 
     std::cout << "Server shutting down..." << std::endl;
 

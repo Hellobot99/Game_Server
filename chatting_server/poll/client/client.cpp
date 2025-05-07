@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <termios.h>
+#include <poll.h>
 
 #define BUFFER_SIZE 1024
 
@@ -44,6 +45,12 @@ int main(int argc , char *argv[]) {
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
 
+    struct pollfd fds[2];
+    fds[0].fd = sock;
+    fds[0].events = POLLIN;
+    fds[1].fd = STDIN_FILENO;
+    fds[1].events = POLLIN;
+
     // 4. 서버에 연결
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cout << "\nConnection Failed \n";
@@ -66,19 +73,28 @@ int main(int argc , char *argv[]) {
 
     // 5. 메시지 보내고 받기
     while (1) {
-        fd_set read_fds;
-        FD_ZERO(&read_fds);
-        FD_SET(sock, &read_fds);
-        FD_SET(STDIN_FILENO, &read_fds);
-        fd_max = std::max(sock, STDIN_FILENO);
-
-        if((fd_num = select(fd_max + 1, &read_fds, NULL, NULL, NULL)) < 0){
-            perror("select failed");
+        
+        int activity = poll(fds, 2, -1);
+        if (activity < 0) {
+            perror("poll error");
             exit(EXIT_FAILURE);
         }
 
-        if(FD_ISSET(STDIN_FILENO, &read_fds)){   
-            
+        // 새로운 클라이언트 접속 확인
+        if (fds[0].revents & POLLIN) {
+            int valread = read(sock, &packet, sizeof(packet));
+
+            if(packet.cmd == JOIN){
+                std::cout<<packet.user_name<<" 가 " <<packet.buffer<< " 방에 참여했습니다."<<std::endl;
+            }
+            else if (packet.cmd == MESSAGE){
+                std::cout << "[받기] " << packet.user_name << " : " << packet.buffer << std::endl;
+            }       
+            else if(packet.cmd == EXIT){
+                std::cout << packet.user_name<<" 가 "<<packet.buffer<<" 방을 나갔습니다."<<std::endl;
+            } 
+        }
+        else if(fds[1].revents & POLLIN){
             std::cout << "[보내기] ";
             std::cout.flush();
             std::getline(std::cin, input);
@@ -94,14 +110,6 @@ int main(int argc , char *argv[]) {
             write(sock, &packet, sizeof(packet));
             std::cout << input << std::endl;
         }
-
-        if(FD_ISSET(sock, &read_fds)){
-            int valread = read(sock, &packet, sizeof(packet));
-            if (valread > 0) {
-                std::cout << "[받기] " << packet.user_name << " : " << packet.buffer << std::endl;
-                memset(&packet, 0, sizeof(packet));
-            }
-        }  
     }
 
     // 6. 소켓 닫기

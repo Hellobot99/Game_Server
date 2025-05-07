@@ -5,13 +5,29 @@
 #include <netinet/in.h>
 #include <vector>
 #include <termios.h>
+#include <poll.h>
+#include <unordered_map>
+#include <unordered_set>
 
 #define BUFFER_SIZE 1024
 
+#define JOIN 1
+#define MESSAGE 2
+#define EXIT 3
+
 typedef struct{
+    int cmd;
     char user_name[100];
     char buffer[1024];    
 } Packet;
+
+typedef struct{
+    std::string name;
+    std::unordered_set<int> clients;
+} chatRoom;
+
+std::unordered_map <std::string, chatRoom> chatRooms;
+std::unordered_map <std::string, std::string> userNames;
 
 int main(int argc, char *argv[]) {
 
@@ -26,8 +42,6 @@ int main(int argc, char *argv[]) {
     int addrlen = sizeof(address);
     char buffer[BUFFER_SIZE] = {0};
     Packet packet;
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
 
     // 1. 서버 소켓 생성
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -35,6 +49,10 @@ int main(int argc, char *argv[]) {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
+
+    int option=1;
+    int optlen=sizeof(option);    
+    setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&option,optlen);
 
     // 2. 주소 설정
     address.sin_family = AF_INET;
@@ -53,32 +71,27 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int option=1;
-    int optlen=sizeof(option);    
-    setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&option,optlen);
-
     std::cout << "Server listening on port " << port << "..." << std::endl;
 
     std::vector<int> client_fds;
-    int fd_max = server_fd, fd_num;
+    
+    struct pollfd fds[1024];
+    fds[0].fd = server_fd;
+    fds[0].events = POLLIN;
+    for(int i = 1; i < 1024; i++) {
+        fds[i].fd = -1; // 초기화
+    }
 
     while(1) {
-        //fd_set 초기화 및 소켓 추가
-        fd_set temp_fds;
-        FD_ZERO(&temp_fds);
-        FD_SET(server_fd, &temp_fds);
-        for (int client_fd : client_fds) {
-            FD_SET(client_fd, &temp_fds);
-        }
 
-        // select 호출
-        if((fd_num = select(fd_max + 1, &temp_fds, NULL, NULL, NULL)) < 0){
-            perror("select failed");
+        int activity = poll(fds, client_fds.size() + 1, -1);
+        if (activity < 0) {
+            perror("poll error");
             exit(EXIT_FAILURE);
         }
 
         // 새로운 클라이언트 접속 확인
-        if (FD_ISSET(server_fd, &temp_fds)) {
+        if (fds[0].revents & POLLIN) {
             int temp_client = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
             if (temp_client < 0) {
                 perror("accept failed");
@@ -87,31 +100,70 @@ int main(int argc, char *argv[]) {
 
             client_fds.push_back(temp_client);
 
-            if (temp_client > fd_max) {
-                fd_max = temp_client;
-            }
+            fds[client_fds.size()].fd = temp_client;
+            fds[client_fds.size()].events = POLLIN;
 
             std::cout << client_fds.size() << " Client connected!" << std::endl;
         }
 
         // 기존 클라이언트들 데이터 읽기 및 에코 처리
-        for (auto it = client_fds.begin(); it != client_fds.end(); ) {
-            if (FD_ISSET(*it, &temp_fds)) {
-                int n = read(*it, &packet, sizeof(packet));
+        for(int i = 1; i < client_fds.size() + 1; i++) {
+            if (fds[i].revents & POLLIN) {
+                int n = read(fds[i].fd, &packet, sizeof(packet));
                 if (n <= 0) {
-                    close(*it);
-                    it = client_fds.erase(it);
+                    int client_fd = fds[i].fd;
+                    std::string username(packet.user_name);
+                    std::string roomname = userNames[username];
+                    chatRooms[roomname].clients.erase(client_fd);
+                    userNames.erase(username);
+
+                    packet.cmd = EXIT;
+
+                    for (int temp_fd : chatRooms[roomname].clients) {
+                        if (temp_fd != fds[i].fd) {
+                            write(temp_fd, &packet, sizeof(packet));
+                        }
+                    }
+
+                    close(fds[i].fd);
+                    fds[i].fd = -1;
+                    client_fds.erase(client_fds.begin() + (i - 1));
                     std::cout << "Client left, "<< client_fds.size() << " Client left" << std::endl;
                 } else {
-                    for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++) 
-                        if(*it != *iter) write(*iter, &packet, sizeof(packet));
-                    ++it;
+                    if(packet.cmd == JOIN){
+                        std::string roomname(packet.buffer);
+                        std::string username(packet.user_name);
+                    
+                        userNames[username] = roomname;
+                    
+                        if(auto room = chatRooms.find(roomname); room != chatRooms.end()){
+                            room->second.clients.insert(fds[i].fd);
+                        } else {
+                            chatRoom newRoom;
+                            newRoom.name = roomname;
+                            newRoom.clients.insert(fds[i].fd);
+                            chatRooms[roomname] = newRoom;
+                        }
+
+                        for (int client_fd : chatRooms[roomname].clients) {
+                            if (client_fd != fds[i].fd) {
+                                write(client_fd, &packet, sizeof(packet));
+                            }
+                        }
+                    }
+                    else if(packet.cmd == MESSAGE){
+                        std::string username(packet.user_name);
+                        std::string roomname = userNames[username];
+                        for (int client_fd : chatRooms[roomname].clients) {
+                            if (client_fd != fds[i].fd) {
+                                write(client_fd, &packet, sizeof(packet));
+                            }
+                        }
+                    }
                 }
-            } else {
-                ++it;
-            }
+            } 
         }
-    }
+    }    
 
     std::cout << "Server shutting down..." << std::endl;
 
