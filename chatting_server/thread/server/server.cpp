@@ -11,6 +11,7 @@
 #include <sys/epoll.h>
 #include <thread>
 #include <mutex>
+#include "thread_pool.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_EVENTS 100
@@ -33,7 +34,7 @@ typedef struct
 } chatRoom;
 
 void new_client(int server_fd, int epfd, struct sockaddr_in address, int addrlen, std::vector<int> &client_fds, struct epoll_event &ev);
-void handle_client(int client_fd, int num, std::vector<int> &client_fds, std::unordered_map<std::string, chatRoom> &chatRooms, std::unordered_map<std::string, std::string> &userNames);
+void handle_client(int client_fd, int epfd, std::vector<int> &client_fds, std::unordered_map<std::string, chatRoom> &chatRooms, std::unordered_map<std::string, std::string> &userNames);
 
 int main(int argc, char *argv[])
 {
@@ -95,6 +96,8 @@ int main(int argc, char *argv[])
     ev.data.fd = server_fd;
     epoll_ctl(epfd, EPOLL_CTL_ADD, server_fd, &ev);
 
+    ThreadPool threadPool(20); // ThreadPool 생성
+
     while (1)
     {
 
@@ -105,12 +108,13 @@ int main(int argc, char *argv[])
             // 새로운 클라이언트 접속 확인
             if (fd == server_fd)
             {
-                std::thread(new_client, server_fd, epfd, address, addrlen, std::ref(client_fds), std::ref(ev)).join();
+                struct epoll_event ev_cpy = ev;
+                threadPool.enqueue(std::bind(new_client, server_fd, epfd, address, std::ref(addrlen), std::ref(client_fds), std::ref(ev)));;
             }
             // 기존 클라이언트들 데이터 읽기 및 에코 처리
             else
-            {                             
-                std::thread(handle_client, fd, i, std::ref(client_fds), std::ref(chatRooms), std::ref(userNames)).join();
+            {             
+                threadPool.enqueue(std::bind(handle_client, fd, epfd,std::ref(client_fds), std::ref(chatRooms), std::ref(userNames)));                
             }
         }
     }
@@ -146,7 +150,7 @@ void new_client(int server_fd, int epfd, struct sockaddr_in address, int addrlen
     std::cout << client_fds.size() << " Client connected!" << std::endl;
 }
 
-void handle_client(int client_fd, int num, std::vector<int> &client_fds, std::unordered_map<std::string, chatRoom> &chatRooms, std::unordered_map<std::string, std::string> &userNames)
+void handle_client(int client_fd, int epfd, std::vector<int> &client_fds, std::unordered_map<std::string, chatRoom> &chatRooms, std::unordered_map<std::string, std::string> &userNames)
 {
     Packet packet;
     memset(&packet, 0, sizeof(packet));
@@ -162,6 +166,7 @@ void handle_client(int client_fd, int num, std::vector<int> &client_fds, std::un
 
         packet.cmd = EXIT;
         strncpy(packet.buffer, roomname.c_str(), sizeof(packet.buffer) - 1);
+        epoll_ctl(epfd, EPOLL_CTL_DEL, client_fd, nullptr);
 
         for (int temp_fd : chatRooms[roomname].clients)
         {
@@ -172,8 +177,10 @@ void handle_client(int client_fd, int num, std::vector<int> &client_fds, std::un
         }
 
         close(client_fd);
-        client_fds.erase(client_fds.begin() + (num - 1));
+        client_fds.erase(std::remove(client_fds.begin(), client_fds.end(), client_fd), client_fds.end());
         std::cout << "Client left, " << client_fds.size() << " Client left" << std::endl;
+
+        return;
     }
     else
     {
@@ -215,6 +222,19 @@ void handle_client(int client_fd, int num, std::vector<int> &client_fds, std::un
                     write(fd, &packet, sizeof(packet));
                 }
             }
+        }
+        else if (packet.cmd == EXIT)
+        {
+            std::string username(packet.user_name);
+            std::string roomname = userNames[username];
+            chatRooms[roomname].clients.erase(client_fd);
+            userNames.erase(username);   
+
+            epoll_ctl(epfd, EPOLL_CTL_DEL, client_fd, nullptr);
+    
+            close(client_fd);
+            client_fds.erase(std::remove(client_fds.begin(), client_fds.end(), client_fd), client_fds.end());
+            std::cout << "Client left, " << client_fds.size() << " Client left" << std::endl;
         }
     }
 }
