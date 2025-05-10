@@ -76,7 +76,9 @@ int main(int argc, char *argv[]) {
                 int bytes = read(sock, &packet, sizeof(packet));
                 if (bytes <= 0) {
                     std::cout << "Disconnected from server." << std::endl;
-                    goto cleanup;
+                    close(sock);
+                    close(epfd);
+                    return 0;
                 }
 
                 switch (packet.cmd) {
@@ -94,14 +96,18 @@ int main(int argc, char *argv[]) {
                 std::getline(std::cin, input);
                 if (std::cin.eof()) {
                     std::cout << "EOF detected. Exiting.\n";
-                    goto cleanup;
+                    close(sock);
+                    close(epfd);
+                    return 0;
                 }
 
                 if (input == "exit") {
                     packet.cmd = EXIT;
-                    strncpy(packet.buffer, "leaving", sizeof(packet.buffer) - 1);
-                    write(sock, &packet, sizeof(packet));
-                    goto cleanup;
+                    strncpy(packet.buffer, "leaving", sizeof(packet.buffer) - 1);\
+                    write(sock,&packet,sizeof(packet));
+                    close(sock);
+                    close(epfd);
+                    return 0;
                 }
 
                 packet.cmd = MESSAGE;
@@ -111,8 +117,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-
-cleanup:
     close(sock);
-    return 0;
+    close(epfd);
+    return 0;    
 }
