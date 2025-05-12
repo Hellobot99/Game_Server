@@ -5,11 +5,9 @@
 int main()
 {
 	NServerNetLib::TcpNetwork serverNet;
-
-	char port[16] = "9190";
 	
 	std::thread logicThread([&]() { 		
-		serverNet.Run(port); }
+		serverNet.Run(); }
 	);
 	
 	std::cout << "press any key to exit...";

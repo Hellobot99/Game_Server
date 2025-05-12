@@ -5,7 +5,6 @@
 
 #include "TcpNetwork.h"
 
-
 namespace NServerNetLib
 	 
 {
@@ -17,7 +16,7 @@ namespace NServerNetLib
 	{		
 	}
 		
-    void TcpNetwork::Run(char port_input[])
+    void TcpNetwork::Run()
     {
         WSADATA wsaData;
         if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -29,7 +28,6 @@ namespace NServerNetLib
         sockaddr_in address;
         int addrlen = sizeof(address);
 		Packet packet;
-		int fd_max = 0, fd_num;
 
         // 소켓 생성
         server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -64,60 +62,13 @@ namespace NServerNetLib
             return;
         }
 
-        std::cout << "Listening on port " << port << "...\n";
+        std::cout << "Listening on port " << port << "...\n";        
 
-        std::vector<SOCKET> client_fds;
-		fd_max = server_fd;
+        struct epoll_event ev;
+        ev.events = EPOLLIN;
+        ev.
+        int epfd = epoll_create1(0), npfd;
 
-        while (1)
-        {
-            fd_set read_set;
-            FD_ZERO(&read_set);
-            FD_SET(server_fd, &read_set);
-            for (int client_fd : client_fds) {
-                FD_SET(client_fd, &read_set);
-            }
-
-            timeval timeout = { 0, 1000 };           
-
-            if ((fd_num = select(fd_max + 1, &read_set, NULL, NULL, &timeout)) < 0) {
-                perror("select failed");
-                exit(EXIT_FAILURE);
-            }
-
-            if (FD_ISSET(server_fd, &read_set)) {
-                int temp_client = accept(server_fd, (struct sockaddr*)&address, (int*)&addrlen);
-                if (temp_client < 0) {
-                    perror("accept failed");
-                    exit(EXIT_FAILURE);
-                }
-
-                client_fds.push_back(temp_client);
-
-                if (temp_client > fd_max) {
-                    fd_max = temp_client;
-                }
-
-                std::cout << client_fds.size() << " Client connected!" << std::endl;
-            }
-
-            for (auto it = client_fds.begin(); it != client_fds.end(); ) {
-                if (FD_ISSET(*it, &read_set)) {
-                    int n = recv(*it, (char*)&packet, sizeof(packet), 0);
-                    if (n <= 0) {
-                        closesocket(*it);
-                        it = client_fds.erase(it);
-                        std::cout << "Client left, " << client_fds.size() << " Client left" << std::endl;
-                    }
-                    else {
-                        for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++)
-                            if (*it != *iter) send(*iter, (const char*)&packet, sizeof(packet), 0);
-                        ++it;
-                    }
-                }
-                else ++it;                
-            }
-        }
     }
 
 	void TcpNetwork::Stop()

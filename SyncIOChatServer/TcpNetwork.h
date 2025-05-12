@@ -14,6 +14,7 @@
 #pragma pack(push, 1)
 typedef struct
 {
+	int cmd;
 	int packetType;
 	int packetSize;
 	char data[1024];
@@ -30,7 +31,7 @@ namespace NServerNetLib
 		virtual ~TcpNetwork();
 
 		
-		void Run(char port[]);
+		void Run();
 
 		void Stop();
 	private:
