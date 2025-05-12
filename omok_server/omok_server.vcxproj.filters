@@ -18,7 +18,7 @@
     <ClCompile Include="thread_pool.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="Game.cpp">
+    <ClCompile Include="GameManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
@@ -32,7 +32,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Game.h">
+    <ClInclude Include="GameManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="PacketHandler.h">

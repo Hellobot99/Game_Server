@@ -20,13 +20,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="thread_pool.cpp" />
-    <ClCompile Include="Game.cpp" />
+    <ClCompile Include="GameManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="PacketHandler.cpp" />
     <ClCompile Include="Server.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Game.h" />
+    <ClInclude Include="GameManager.h" />
     <ClInclude Include="PacketHandler.h" />
     <ClInclude Include="Server.h" />
     <ClInclude Include="thread_pool.h" />

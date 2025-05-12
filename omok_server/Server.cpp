@@ -1,6 +1,8 @@
 #include "Server.h"
+#include "PacketHandler.h"
+#include "GameManager.h"
 
-Server::Server(int port) : port(port), server_fd(-1), epfd(-1)
+Server::Server(int port) : port(port), server_fd(-1)
 {
     // Constructor implementation
 }
@@ -23,12 +25,14 @@ void Server::start()
     if (server_fd == 0)
     {
         std::cerr << "socket failed with error: " << WSAGetLastError() << std::endl;
+        closesocket(server_fd);
+        WSACleanup();
         exit(EXIT_FAILURE);
     }
 
     int option = 1;
     int optlen = sizeof(option);
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &option, optlen);
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)option, optlen);
 
     // 2. 주소 설정
     address.sin_family = AF_INET;
@@ -36,17 +40,17 @@ void Server::start()
     address.sin_port = htons(port);
 
     // 3. 바인딩
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0)
     {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
+        std::cerr << "bind failed: " << WSAGetLastError() << std::endl;
+        stop();
     }
 
     // 4. 리슨
     if (listen(server_fd, 1) < 0)
     {
-        perror("listen failed");
-        exit(EXIT_FAILURE);
+        std::cerr << "listen failed: " << WSAGetLastError() << std::endl;
+        stop();
     }
 
     std::cout << "Server listening on port " << port << "..." << std::endl;
@@ -54,27 +58,62 @@ void Server::start()
     fd_set readfds, tempfds;
     FD_ZERO(&readfds);
     FD_SET(server_fd, &readfds);
-    int max_fd = server_fd;
+    int fd_max = server_fd;
 
-    std::vector<int> client_fds;
+    std::vector<SOCKET> client_fds;
+
+    //std::unordered_map <std::string, chatRoom> chatRooms;
+    //std::unordered_map <std::string, std::string> userNames;
+
+    char buffer[BUFFER_SIZE];
+
+    GameManager game_manager;
+    PacketHandler packet_handler(&game_manager);
 
     while (1) {
         tempfds = readfds;
-        int activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
+        int activity = select(fd_max + 1, &tempfds, NULL, NULL, NULL);
 
         if (FD_ISSET(server_fd, &readfds)) {
-            //새로운 클라이언트
-            
+            SOCKET temp_client = accept(server_fd, (struct sockaddr*)&address, &addrlen);
+            if (temp_client < 0) {
+                std::cerr << "accept failed: " << WSAGetLastError() << std::endl;
+                stop();
+            }
+
+            client_fds.push_back(temp_client);
+
+            if (temp_client > fd_max) {
+                fd_max = temp_client;
+            }
+
+            std::cout << client_fds.size() << " Client connected!" << std::endl;
+
         }
         else {
-            for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++) {
-                if (FD_ISSET(*iter, &readfds)) {
-                    //기존 클라이언트
+            for (auto it = client_fds.begin(); it != client_fds.end(); it++) {
+                if (FD_ISSET(*it, &readfds)) {
+                    int n = send(*it, buffer, sizeof(buffer), 0);
+                    if (n <= 0) {
+                        // 클라이언트 연결 끊김
+                        //TODO 게임매니저한테도 보내기
+                        SOCKET client_fd = *it;
+                        it = client_fds.erase(it);
+                        closesocket(client_fd);
+                    }
+                    else {
+                        // 클라이언트에게 데이터 전송 받음
+                        
+                        packet_handler.process(*it, std::string(buffer));
+                    }
+                }
+                else {
+                    ++it;
                 }
             }
         }
+
     }
-    
 }
 
 void Server::stop()
