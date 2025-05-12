@@ -51,7 +51,29 @@ void Server::start()
 
     std::cout << "Server listening on port " << port << "..." << std::endl;
 
+    fd_set readfds, tempfds;
+    FD_ZERO(&readfds);
+    FD_SET(server_fd, &readfds);
+    int max_fd = server_fd;
 
+    std::vector<int> client_fds;
+
+    while (1) {
+        tempfds = readfds;
+        int activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
+
+        if (FD_ISSET(server_fd, &readfds)) {
+            //새로운 클라이언트
+            
+        }
+        else {
+            for (auto iter = client_fds.begin(); iter != client_fds.end(); iter++) {
+                if (FD_ISSET(*iter, &readfds)) {
+                    //기존 클라이언트
+                }
+            }
+        }
+    }
     
 }
 
