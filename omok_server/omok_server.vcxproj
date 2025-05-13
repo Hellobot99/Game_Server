@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Room.cpp" />
+    <ClCompile Include="Session.cpp" />
     <ClCompile Include="thread_pool.cpp" />
     <ClCompile Include="GameManager.cpp" />
     <ClCompile Include="main.cpp" />
@@ -28,7 +30,9 @@
   <ItemGroup>
     <ClInclude Include="GameManager.h" />
     <ClInclude Include="PacketHandler.h" />
+    <ClInclude Include="Room.h" />
     <ClInclude Include="Server.h" />
+    <ClInclude Include="Session.h" />
     <ClInclude Include="thread_pool.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -121,6 +125,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);ws2_32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

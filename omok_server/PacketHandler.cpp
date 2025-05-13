@@ -40,21 +40,26 @@ void PacketHandler::process(SOCKET client, const std::string& message) {
 }
 
 void PacketHandler::handleLogin(SOCKET client, const std::string& name) {
-
+    gameManager->Login(client, name);
+    std::cout << name << " Logined" << std::endl;
 }
 
 void PacketHandler::handleEnter(SOCKET client, const std::string& roomName) {
-
+    gameManager->Enter(client, roomName);
+    std::cout << roomName << " Entered" << std::endl;
 }
 
 void PacketHandler::handlePut(SOCKET client, int x, int y) {
-
+    gameManager->Put(client, x, y);
+    std::cout << "Put" << x << " , " << y << std::endl;
 }
 
 void PacketHandler::handleChat(SOCKET client, const std::string& msg) {
-
+    gameManager->Chat(client, msg);
+    std::cout << "Chat" << msg << std::endl;
 }
 
 void PacketHandler::handleExit(SOCKET client) {
-
+    gameManager->Exit(client);
+    std::cout << "Exit" << std::endl;
 }
