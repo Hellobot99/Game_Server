@@ -115,7 +115,6 @@ void Server::start()
                 }
             }
         }
-
     }
 }
 
