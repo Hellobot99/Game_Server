@@ -70,8 +70,13 @@ void Server::start()
     PacketHandler packetHandler(&gameManager);
 
     while (1) {
+        timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
         tempfds = readfds;
-        int activity = select(fd_max + 1, &tempfds, NULL, NULL, NULL);
+        int activity = select(fd_max + 1, &tempfds, NULL, NULL, &timeout);
+        std::cout << "test" << std::endl;
 
         if (FD_ISSET(server_fd, &tempfds)) {
             SOCKET temp_client = accept(server_fd, (struct sockaddr*)&address, &addrlen);
@@ -92,11 +97,12 @@ void Server::start()
         }
         for (auto it = client_fds.begin(); it != client_fds.end(); ) {
             if (FD_ISSET(*it, &tempfds)) {
+                std::cout << "ASD" << std::endl;
                 int n = recv(*it, buffer, sizeof(buffer), 0);
+                std::cout << "recv 리턴값: " << n << std::endl;
                 if (n == 0) {
                     // 클라이언트 연결 끊김
                     gameManager.Exit(*it);
-                    num--;
                     SOCKET client_fd = *it;
                     std::cout << client_fd << " Disconnected.." << std::endl;
                     closesocket(client_fd);
@@ -110,6 +116,7 @@ void Server::start()
                 }
                 else {
                     // 클라이언트에게 데이터 전송 받음
+                    std::cout << "asd" << std::endl;
                     packetHandler.process(*it, std::string(buffer));
                     ++it;
                 }

@@ -59,13 +59,16 @@ namespace csharp_test_client
         }
 
         //스트림에 쓰기
+
+        
         public void Send(byte[] sendData)
         {
             try
             {
                 if (Sock != null && Sock.Connected) //연결상태 유무 확인
                 {
-                    Sock.Send(sendData, 0, sendData.Length, SocketFlags.None);
+                    int a = Sock.Send(sendData, 0, sendData.Length, SocketFlags.None);
+                    DevLog.Write($"send: {a} bytes", LOG_LEVEL.INFO);
                 }
                 else
                 {
@@ -77,6 +80,8 @@ namespace csharp_test_client
                 LatestErrorMsg = se.Message;
             }
         }
+        
+
 
         //소켓과 스트림 닫기
         public void Close()

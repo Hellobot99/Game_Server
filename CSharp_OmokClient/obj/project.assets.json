@@ -239,17 +239,17 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\User\\.nuget\\packages\\": {},
+    "C:\\Users\\ktj\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\User\\Desktop\\github\\Game_Server\\CSharp_OmokClient\\OmokClient.csproj",
+      "projectUniqueName": "C:\\Users\\ktj\\Desktop\\github\\Game_Server\\CSharp_OmokClient\\OmokClient.csproj",
       "projectName": "OmokClient",
-      "projectPath": "C:\\Users\\User\\Desktop\\github\\Game_Server\\CSharp_OmokClient\\OmokClient.csproj",
-      "packagesPath": "C:\\Users\\User\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\User\\Desktop\\github\\Game_Server\\CSharp_OmokClient\\obj\\",
+      "projectPath": "C:\\Users\\ktj\\Desktop\\github\\Game_Server\\CSharp_OmokClient\\OmokClient.csproj",
+      "packagesPath": "C:\\Users\\ktj\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\ktj\\Desktop\\github\\Game_Server\\CSharp_OmokClient\\obj\\",
       "projectStyle": "PackageReference",
       "skipContentFileWrite": true,
       "UsingMicrosoftNETSdk": false,
@@ -257,7 +257,7 @@
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\User\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\ktj\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
