@@ -98,8 +98,38 @@ void Server::start()
         for (auto it = client_fds.begin(); it != client_fds.end(); ) {
             if (FD_ISSET(*it, &tempfds)) {
                 std::cout << "ASD" << std::endl;
-                int n = recv(*it, buffer, sizeof(buffer), 0);
+                // 1. 헤더 크기만큼 peek 시도
+                int headerSize = 8;
+                int peekLen = recv(*it, buffer, headerSize, MSG_PEEK);
+                if (peekLen <= 0) {
+                    std::cout << "peek failed or disconnected" << std::endl;
+                    closesocket(*it);
+                    it = client_fds.erase(it);
+                    continue;
+                }
+
+                // 2. 길이가 충분하지 않으면 skip (패킷 다 안 옴)
+                if (peekLen < headerSize) {
+                    std::cout << "partial header, wait more" << std::endl;
+                    ++it;
+                    continue;
+                }
+
+                // 3. 헤더에서 총 패킷 길이 추출 (너 구조 기준에 따라 조정)
+                int packetSize = *(short*)(buffer + 3);  // ← MsgPackPacketHeaderInfo 기준: 3 offset
+
+                // 4. 총 패킷 길이만큼 peek로 확인
+                int totalPeek = recv(*it, buffer, packetSize, MSG_PEEK);
+                if (totalPeek < packetSize) {
+                    std::cout << "partial packet, wait more" << std::endl;
+                    ++it;
+                    continue;
+                }
+
+                // 5. 이제 안전하게 실제 수신
+                int n = recv(*it, buffer, packetSize, 0);
                 std::cout << "recv 리턴값: " << n << std::endl;
+                
                 if (n == 0) {
                     // 클라이언트 연결 끊김
                     gameManager.Exit(*it);
